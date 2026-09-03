@@ -16,6 +16,9 @@ Router.get("/verify-email/:token", authControllers.verifyEmail);
 Router.post("/resend-verification", authControllers.resendVerification);
 Router.post("/forgot-password", authControllers.forgotPassword);
 Router.post("/reset-password/:token", authControllers.resetPassword);
+Router.get("/google", authControllers.googleAuth);
+Router.get("/google/callback", authControllers.googleCallback);
+Router.post("/google/complete", authControllers.completeGoogleRegistration);
 
 // ✅ Test route for auth
 Router.get("/test", (req, res) => {

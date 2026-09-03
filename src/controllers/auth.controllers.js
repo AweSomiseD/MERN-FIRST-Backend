@@ -7,57 +7,75 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
 } from "../services/email.service.js";
+import {
+  generateOAuthState,
+  getGoogleAuthorizationUrl,
+  exchangeCodeForTokens,
+  verifyGoogleIdToken,
+} from "../services/googleOAuth.service.js";
+import generateUsername from "../utils/generateUsername.js";
 
+//  ACTUALL CONTROLLERS WERE DOWN BELOW...
 async function registerUser(req, res) {
-  const { username, email, password, role = "user" } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({
-      message: "Username, email and password are required",
+  try {
+    const { username, email, password, role = "user" } = req.body;
+    if (!username || !email || !password) {
+      return res.status(400).json({
+        message: "Username, email and password are required",
+      });
+    }
+    if (!["user", "artist"].includes(role)) {
+      return res.status(400).json({
+        message: "Invalid role",
+      });
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+    const isUserExist = await userModel.findOne({
+      $or: [{ username }, { email: normalizedEmail }],
     });
-  }
-  if (!["user", "artist"].includes(role)) {
-    return res.status(400).json({
-      message: "Invalid role",
-    });
-  }
-  const normalizedEmail = email.toLowerCase().trim();
-  const isUserExist = await userModel.findOne({
-    $or: [{ username }, { email: normalizedEmail }],
-  });
-  console.log({
-    username: username.trim(),
-    email: email.toLowerCase().trim(),
-    isUserExist: !!isUserExist,
-  });
-  if (isUserExist) {
-    return res.status(409).json({
-      message: "User Already Exists",
-    });
-  }
-  const pepperedPassword = password + process.env.PASSWORD_PEPPER;
-  const hash = await bcrypt.hash(pepperedPassword, 10);
-  const { plainToken, hashedToken } = generateVerificationToken();
+    if (isUserExist) {
+      return res.status(409).json({
+        message: "User Already Exists",
+      });
+    }
+    const pepperedPassword = password + process.env.PASSWORD_PEPPER;
+    const hash = await bcrypt.hash(pepperedPassword, 10);
+    const { plainToken, hashedToken } = generateVerificationToken();
 
-  const user = await userModel.create({
-    username,
-    email: normalizedEmail,
-    password: hash,
-    role: role,
-    emailVerified: false,
-    emailVerificationToken: hashedToken,
-    emailVerificationExpires: new Date(Date.now() + 15 * 60 * 1000),
-  });
-  await sendVerificationEmail(normalizedEmail, plainToken);
+    const user = await userModel.create({
+      username,
+      email: normalizedEmail,
+      password: hash,
+      role: role,
+      emailVerified: false,
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: new Date(Date.now() + 15 * 60 * 1000),
+    });
 
-  return res.status(201).json({
-    message: "User Register successfully",
-    user: {
-      id: user._id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-    },
-  });
+    // Email fail ho bhi jaye to registration ko fail mat karo
+    try {
+      await sendVerificationEmail(normalizedEmail, plainToken);
+    } catch (emailError) {
+      console.error("Verification email failed to send:", emailError);
+      // ignore — user register ho chuka hai, email baad mein resend ho sakti hai
+    }
+
+    return res.status(201).json({
+      message: "User Register successfully",
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Register Error:", error);
+    return res.status(500).json({
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
 }
 
 async function loginUser(req, res) {
@@ -162,7 +180,11 @@ async function loginUser(req, res) {
 
 async function getCurrentUser(req, res) {
   try {
+    console.log("GET CURRENT USER - req.user:", req.user);
+
     const user = await userModel.findById(req.user.id).select("-password");
+
+    console.log("GET CURRENT USER - DB USER:", user);
 
     if (!user) {
       return res.status(404).json({
@@ -174,6 +196,8 @@ async function getCurrentUser(req, res) {
       user,
     });
   } catch (error) {
+    console.error("Get Current User Error:", error);
+
     return res.status(500).json({
       message: "Internal Server Error",
       error: error.message,
@@ -400,6 +424,233 @@ async function resetPassword(req, res) {
   }
 }
 
+const googleAuth = (req, res) => {
+  const state = generateOAuthState();
+  res.cookie("oauthState", state, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: false,
+    path: "/",
+    maxAge: 5 * 60 * 1000,
+  });
+  const googleUrl = getGoogleAuthorizationUrl(state);
+  res.redirect(googleUrl);
+};
+
+const googleCallback = async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    if (!code) {
+      return res.status(400).json({
+        message: "Authorization code is missing",
+      });
+    }
+    const storedState = req.cookies.oauthState;
+    if (!storedState || storedState !== state) {
+      return res.status(400).json({
+        message: "Invalid OAuth state",
+      });
+    }
+    console.log("OAuth state verified successfully");
+    console.log("Google OAuth code received");
+    const googleTokens = await exchangeCodeForTokens(code);
+    console.log("Google tokens received");
+    const googleUser = await verifyGoogleIdToken(googleTokens.id_token);
+    console.log("Google User:", googleUser);
+    // Check if Google account is already linked
+    const existingGoogleUser = await userModel.findOne({
+      googleId: googleUser.sub,
+    });
+    let user;
+    if (existingGoogleUser) {
+      // Google account already linked
+      user = existingGoogleUser;
+      console.log("Existing Google user found");
+    } else {
+      // Check if email already exists
+      const existingEmailUser = await userModel.findOne({
+        email: googleUser.email,
+      });
+      if (existingEmailUser) {
+        // Link Google account with existing user
+        existingEmailUser.googleId = googleUser.sub;
+        existingEmailUser.emailVerified = googleUser.email_verified;
+        await existingEmailUser.save();
+        user = existingEmailUser;
+        console.log("Existing user found by email - Google account linked");
+      } else {
+        // New Google user // Do NOT create the user yet. // First ask the user to select a role.
+        res.cookie(
+          "googlePendingUser",
+          JSON.stringify({
+            googleId: googleUser.sub,
+            email: googleUser.email,
+            name: googleUser.name,
+            emailVerified: googleUser.email_verified,
+          }),
+          {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: false,
+            path: "/",
+            maxAge: 5 * 60 * 1000,
+          },
+        );
+        console.log("New Google user pending role selection");
+
+        res.clearCookie("oauthState", {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: false,
+          path: "/",
+        });
+        return res.redirect("http://localhost:5173/choose-role");
+      }
+    }
+    // Create application access token
+    const accessToken = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "15m",
+      },
+    );
+
+    // Create application refresh token
+    const refreshToken = jwt.sign(
+      {
+        id: user._id,
+      },
+      process.env.JWT_REFRESH_SECRET,
+      {
+        expiresIn: "7d",
+      },
+    );
+
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      path: "/",
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    // OAuth state is no longer needed
+    console.log("Clearing OAuth state cookie...");
+    res.clearCookie("oauthState", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      path: "/",
+    });
+    console.log("OAuth state cookie clear command sent");
+
+    return res.redirect("http://localhost:5173/");
+  } catch (error) {
+    console.error("Google Callback Error:", error);
+
+    return res.status(500).json({
+      message: "Google authentication failed",
+    });
+  }
+};
+
+const completeGoogleRegistration = async (req, res) => {
+  try {
+    const { role } = req.body;
+    // Validate role
+    if (!role || !["user", "artist"].includes(role)) {
+      return res.status(400).json({ message: "Invalid role" });
+    }
+    // Get pending Google user
+    const pendingUser = req.cookies.googlePendingUser;
+    if (!pendingUser) {
+      return res
+        .status(400)
+        .json({ message: "Google registration session expired" });
+    }
+    const googleUser = JSON.parse(pendingUser);
+    // Double-check that email/google account was not registered
+    const existingUser = await userModel.findOne({
+      $or: [{ email: googleUser.email }, { googleId: googleUser.googleId }],
+    });
+    if (existingUser) {
+      return res.status(409).json({ message: "User already exists" });
+    }
+    // Generate unique username
+    const username = await generateUsername(googleUser.name);
+    // Create user
+    const newUser = new userModel({
+      username,
+      email: googleUser.email,
+      googleId: googleUser.googleId,
+      authProvider: "google",
+      emailVerified: googleUser.emailVerified,
+      role,
+    });
+    await newUser.save();
+    // Create access token
+    const accessToken = jwt.sign(
+      { id: newUser._id, role: newUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" },
+    );
+    // Create refresh token
+    const refreshToken = jwt.sign(
+      { id: newUser._id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" },
+    );
+    // Access token cookie
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      path: "/",
+      maxAge: 15 * 60 * 1000,
+    });
+    // Refresh token cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    // Clear pending Google registration
+    res.clearCookie("googlePendingUser", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      path: "/",
+    });
+    console.log(`Google user created successfully with role: ${role}`);
+    return res.status(201).json({
+      message: "Google registration completed successfully",
+      user: {
+        id: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        role: newUser.role,
+      },
+    });
+  } catch (error) {
+    console.error("Complete Google Registration Error:", error);
+    return res.status(500).json({ message: "Google registration failed" });
+  }
+};
+
 export default {
   registerUser,
   loginUser,
@@ -410,4 +661,7 @@ export default {
   resendVerification,
   forgotPassword,
   resetPassword,
+  googleAuth,
+  googleCallback,
+  completeGoogleRegistration,
 };

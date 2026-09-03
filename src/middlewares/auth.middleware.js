@@ -41,8 +41,9 @@ async function authArtist(req, res, next) {
 
 // Just a middleware to check if the user is authenticated and has the role of "user" or "artist"
 async function authUser(req, res, next) {
-  // Check for accessToken instead of token
   const accessToken = req.cookies.accessToken;
+
+  console.log("AUTH USER COOKIE:", !!accessToken);
 
   if (!accessToken) {
     return res.status(401).json({
@@ -52,6 +53,8 @@ async function authUser(req, res, next) {
 
   try {
     const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+
+    console.log("AUTH USER DECODED:", decoded);
 
     if (decoded.role !== "user" && decoded.role !== "artist") {
       return res.status(403).json({
@@ -64,7 +67,6 @@ async function authUser(req, res, next) {
   } catch (error) {
     console.log("User Auth Error:", error);
 
-    // Check if token expired
     if (error.name === "TokenExpiredError") {
       return res.status(401).json({
         message: "Access token expired",
