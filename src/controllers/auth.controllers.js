@@ -18,13 +18,13 @@ import generateUsername from "../utils/generateUsername.js";
 //  ACTUALL CONTROLLERS WERE DOWN BELOW...
 async function registerUser(req, res) {
   try {
-    const { username, email, password, role = "user" } = req.body;
+    const { username, email, password, role = "listener" } = req.body;
     if (!username || !email || !password) {
       return res.status(400).json({
         message: "Username, email and password are required",
       });
     }
-    if (!["user", "artist"].includes(role)) {
+    if (!["listener", "artist"].includes(role)) {
       return res.status(400).json({
         message: "Invalid role",
       });
@@ -570,7 +570,7 @@ const completeGoogleRegistration = async (req, res) => {
   try {
     const { role } = req.body;
     // Validate role
-    if (!role || !["user", "artist"].includes(role)) {
+    if (!role || !["listener", "artist"].includes(role)) {
       return res.status(400).json({ message: "Invalid role" });
     }
     // Get pending Google user

@@ -39,7 +39,7 @@ async function authArtist(req, res, next) {
   }
 }
 
-// Just a middleware to check if the user is authenticated and has the role of "user" or "artist"
+// Just a middleware to check if the user is authenticated and has the role of "listener" or "artist"
 async function authUser(req, res, next) {
   const accessToken = req.cookies.accessToken;
 
@@ -56,7 +56,7 @@ async function authUser(req, res, next) {
 
     console.log("AUTH USER DECODED:", decoded);
 
-    if (decoded.role !== "user" && decoded.role !== "artist") {
+    if (decoded.role !== "listener" && decoded.role !== "artist") {
       return res.status(403).json({
         message: "You Don't Have Access",
       });

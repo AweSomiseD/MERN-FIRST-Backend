@@ -2,31 +2,47 @@ import express from "express";
 import musicControllers from "../controllers/music.controllers.js";
 import multer from "multer";
 import authMiddleware from "../middlewares/auth.middleware.js";
+import roleMiddleware from "../middlewares/role.middleware.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
 });
+
 const Router = express.Router();
+
+// Artist only
 Router.post(
   "/upload",
-  authMiddleware.authArtist,
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
   upload.single("music"),
   musicControllers.createMusic,
 );
-Router.post("/album", authMiddleware.authArtist, musicControllers.createAlbum);
+
+Router.post(
+  "/album",
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
+  musicControllers.createAlbum,
+);
 
 Router.get(
   "/my-music",
-  authMiddleware.authArtist,
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
   musicControllers.getMyMusics,
 );
-Router.get("/", authMiddleware.authUser, musicControllers.getAllMusics);
 
 Router.get(
   "/my-albums",
-  authMiddleware.authArtist,
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
   musicControllers.getMyAlbums,
 );
+
+// Listener + Artist
+Router.get("/", authMiddleware.authUser, musicControllers.getAllMusics);
+
 Router.get("/albums", authMiddleware.authUser, musicControllers.getAllAlbums);
 
 Router.get(
@@ -35,7 +51,7 @@ Router.get(
   musicControllers.getAlbumById,
 );
 
-// ✅ Test route for music
+// Test route
 Router.get("/test", (req, res) => {
   res.json({
     message: "✅ Music route working!",

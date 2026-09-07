@@ -105,6 +105,12 @@ async function getAlbumById(req, res) {
     .populate("artist", "username email")
     .populate("musics");
 
+  if (!album) {
+    return res.status(404).json({
+      message: "Album not found",
+    });
+  }
+
   return res.status(200).json({
     message: "Album Fetched Successfully",
     album,
