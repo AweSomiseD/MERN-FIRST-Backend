@@ -556,7 +556,10 @@ const googleCallback = async (req, res) => {
     });
     console.log("OAuth state cookie clear command sent");
 
-    return res.redirect("http://localhost:5173/");
+    const dashboardPath =
+      user.role === "artist" ? "/artist" : "/listener";
+
+    return res.redirect(`http://localhost:5173${dashboardPath}`);
   } catch (error) {
     console.error("Google Callback Error:", error);
 
