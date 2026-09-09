@@ -1,12 +1,8 @@
 import express from "express";
 import musicControllers from "../controllers/music.controllers.js";
-import multer from "multer";
+import { uploadAudioSingle } from "../middlewares/upload.middleware.js";
 import authMiddleware from "../middlewares/auth.middleware.js";
 import roleMiddleware from "../middlewares/role.middleware.js";
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-});
 
 const Router = express.Router();
 
@@ -15,7 +11,7 @@ Router.post(
   "/upload",
   authMiddleware.authUser,
   roleMiddleware(["artist"]),
-  upload.single("music"),
+  uploadAudioSingle("music"),
   musicControllers.createMusic,
 );
 
@@ -38,6 +34,20 @@ Router.get(
   authMiddleware.authUser,
   roleMiddleware(["artist"]),
   musicControllers.getMyAlbums,
+);
+
+Router.delete(
+  "/:musicId",
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
+  musicControllers.deleteMusic,
+);
+
+Router.delete(
+  "/album/:albumId",
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
+  musicControllers.deleteAlbum,
 );
 
 // Listener + Artist

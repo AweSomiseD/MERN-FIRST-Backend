@@ -56,7 +56,8 @@ async function authUser(req, res, next) {
 
     console.log("AUTH USER DECODED:", decoded);
 
-    if (decoded.role !== "listener" && decoded.role !== "artist") {
+    // if (decoded.role !== "listener" && decoded.role !== "artist") {
+    if (!["listener", "artist", "admin"].includes(decoded.role)) {
       return res.status(403).json({
         message: "You Don't Have Access",
       });

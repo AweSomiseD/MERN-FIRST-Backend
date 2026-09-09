@@ -121,6 +121,13 @@ async function loginUser(req, res) {
         message: "Invalid Credentials",
       });
     }
+    // check if user is banned
+    if (user.isBanned) {
+      return res.status(403).json({
+        message: "Your account has been banned. Please contact support.",
+      });
+    }
+
     // Create JWT
     const accessToken = jwt.sign(
       {
@@ -192,6 +199,12 @@ async function getCurrentUser(req, res) {
       });
     }
 
+    if (user.isBanned) {
+      return res.status(403).json({
+        message: "Your account has been banned. Please contact support.",
+      });
+    }
+
     return res.status(200).json({
       user,
     });
@@ -243,6 +256,12 @@ async function refreshToken(req, res) {
     if (!user) {
       return res.status(401).json({
         message: "User not found",
+      });
+    }
+
+    if (user.isBanned) {
+      return res.status(403).json({
+        message: "Your account has been banned. Please contact support.",
       });
     }
 
@@ -556,8 +575,7 @@ const googleCallback = async (req, res) => {
     });
     console.log("OAuth state cookie clear command sent");
 
-    const dashboardPath =
-      user.role === "artist" ? "/artist" : "/listener";
+    const dashboardPath = user.role === "artist" ? "/artist" : "/listener";
 
     return res.redirect(`http://localhost:5173${dashboardPath}`);
   } catch (error) {

@@ -1,15 +1,15 @@
 import musicModel from "../models/music.model.js";
 import uploadFile from "../services/storage.service.js";
 import albumModel from "../models/album.model.js";
+import { validateFile } from "../utils/fileValidation.js";
 
 async function createMusic(req, res) {
   const { title } = req.body;
   const file = req.file;
 
-  if (!file) {
-    return res.status(400).json({
-      message: "Music file is required!",
-    });
+  const validation = validateFile(file, "audio");
+  if (!validation.valid) {
+    return res.status(400).json({ message: validation.message });
   }
 
   const result = await uploadFile(file.buffer.toString("base64"));
@@ -33,6 +33,18 @@ async function createMusic(req, res) {
 
 async function createAlbum(req, res) {
   const { title, musics } = req.body;
+  if (Array.isArray(musics) && musics.length > 0) {
+    const ownedCount = await musicModel.countDocuments({
+      _id: { $in: musics },
+      artist: req.user.id,
+    });
+
+    if (ownedCount !== musics.length) {
+      return res.status(403).json({
+        message: "You can only add your own music to an album",
+      });
+    }
+  }
   const album = await albumModel.create({
     title,
     artist: req.user.id,
@@ -117,6 +129,46 @@ async function getAlbumById(req, res) {
   });
 }
 
+async function deleteMusic(req, res) {
+  const { musicId } = req.params;
+
+  const music = await musicModel.findById(musicId);
+
+  if (!music) {
+    return res.status(404).json({ message: "Music not found" });
+  }
+
+  if (music.artist.toString() !== req.user.id) {
+    return res
+      .status(403)
+      .json({ message: "You can only delete your own music" });
+  }
+
+  await musicModel.findByIdAndDelete(musicId);
+
+  return res.status(200).json({ message: "Music deleted successfully" });
+}
+
+async function deleteAlbum(req, res) {
+  const { albumId } = req.params;
+
+  const album = await albumModel.findById(albumId);
+
+  if (!album) {
+    return res.status(404).json({ message: "Album not found" });
+  }
+
+  if (album.artist.toString() !== req.user.id) {
+    return res
+      .status(403)
+      .json({ message: "You can only delete your own album" });
+  }
+
+  await albumModel.findByIdAndDelete(albumId);
+
+  return res.status(200).json({ message: "Album deleted successfully" });
+}
+
 export default {
   createMusic,
   createAlbum,
@@ -125,4 +177,6 @@ export default {
   getAllAlbums,
   getMyAlbums,
   getAlbumById,
+  deleteMusic,
+  deleteAlbum,
 };

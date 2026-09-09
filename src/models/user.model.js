@@ -4,7 +4,6 @@ const userSchema = new mongoose.Schema({
   username: {
     type: String,
     required: true,
-    unique: true,
   },
 
   email: {
@@ -33,8 +32,13 @@ const userSchema = new mongoose.Schema({
 
   role: {
     type: String,
-    enum: ["listener", "artist"],
+    enum: ["listener", "artist", "admin"],
     default: "listener",
+  },
+
+  isBanned: {
+    type: Boolean,
+    default: false,
   },
 
   emailVerified: {
