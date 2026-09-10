@@ -16,6 +16,12 @@ export const FILE_TYPE_CONFIG = {
     label: "audio",
     formatsLabel: "MP3, WAV, M4A",
   },
+  image: {
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+    maxSizeBytes: 5 * 1024 * 1024,
+    label: "image",
+    formatsLabel: "JPG, PNG, WEBP",
+  },
 };
 
 export function validateFile(file, type) {

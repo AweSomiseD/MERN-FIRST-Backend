@@ -1,9 +1,24 @@
 import userModel from "../models/user.model.js";
+import musicModel from "../models/music.model.js";
+import albumModel from "../models/album.model.js";
 
 async function getAllUsers(req, res) {
   try {
+    const { search, role } = req.query;
+
+    const filter = {};
+
+    if (search?.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      filter.$or = [{ username: searchRegex }, { email: searchRegex }];
+    }
+
+    if (role?.trim() && ["listener", "artist", "admin"].includes(role)) {
+      filter.role = role;
+    }
+
     const users = await userModel
-      .find()
+      .find(filter)
       .select(
         "-password -emailVerificationToken -emailVerificationExpires -passwordResetToken -passwordResetExpires",
       );
@@ -113,9 +128,84 @@ async function deleteUser(req, res) {
   }
 }
 
+async function deleteAnyMusic(req, res) {
+  try {
+    const { musicId } = req.params;
+
+    const music = await musicModel.findByIdAndDelete(musicId);
+
+    if (!music) {
+      return res.status(404).json({ message: "Music not found" });
+    }
+
+    return res.status(200).json({ message: "Music deleted by admin" });
+  } catch (error) {
+    console.error("Admin Delete Music Error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+async function deleteAnyAlbum(req, res) {
+  try {
+    const { albumId } = req.params;
+
+    const album = await albumModel.findByIdAndDelete(albumId);
+
+    if (!album) {
+      return res.status(404).json({ message: "Album not found" });
+    }
+
+    return res.status(200).json({ message: "Album deleted by admin" });
+  } catch (error) {
+    console.error("Admin Delete Album Error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+async function getPlatformStats(req, res) {
+  try {
+    const [totalUsers, totalSongs, totalAlbums, roleBreakdown, recentSignups] =
+      await Promise.all([
+        userModel.countDocuments(),
+        musicModel.countDocuments(),
+        albumModel.countDocuments(),
+        userModel.aggregate([{ $group: { _id: "$role", count: { $sum: 1 } } }]),
+        userModel
+          .find()
+          .select("username email role createdAt")
+          .sort({ _id: -1 })
+          .limit(5),
+      ]);
+
+    // Aggregation ka result [{ _id: "listener", count: 5 }, ...] hota hai,
+    // usko { listener: 5, artist: 2, admin: 1 } shape mein convert karo
+    const roleCounts = { listener: 0, artist: 0, admin: 0 };
+    roleBreakdown.forEach((r) => {
+      roleCounts[r._id] = r.count;
+    });
+
+    return res.status(200).json({
+      message: "Platform stats fetched successfully",
+      stats: {
+        totalUsers,
+        totalSongs,
+        totalAlbums,
+        roleCounts,
+        recentSignups,
+      },
+    });
+  } catch (error) {
+    console.error("Get Platform Stats Error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
 export default {
   getAllUsers,
   updateUserRole,
   toggleUserBan,
   deleteUser,
+  deleteAnyMusic,
+  deleteAnyAlbum,
+  getPlatformStats,
 };
