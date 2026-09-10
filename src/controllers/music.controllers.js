@@ -9,18 +9,36 @@ import mongoose from "mongoose";
 async function createMusic(req, res) {
   const { title } = req.body;
   const file = req.file;
+  const coverImageFile = req.coverImageFile;
 
   const validation = validateFile(file, "audio");
   if (!validation.valid) {
     return res.status(400).json({ message: validation.message });
   }
 
-  const result = await uploadFile(file.buffer.toString("base64"));
+  if (coverImageFile) {
+    const imageValidation = validateFile(coverImageFile, "image");
+    if (!imageValidation.valid) {
+      return res.status(400).json({ message: imageValidation.message });
+    }
+  }
+
+  const result = await uploadFile(file);
+
+  let coverImageUrl = null;
+  if (coverImageFile) {
+    const imageResult = await uploadFile({
+      ...coverImageFile,
+      folder: "covers",
+    });
+    coverImageUrl = imageResult.url;
+  }
 
   const music = await musicModel.create({
     uri: result.url,
     title,
     artist: req.user.id,
+    coverImage: coverImageUrl,
   });
 
   return res.status(201).json({
@@ -30,12 +48,31 @@ async function createMusic(req, res) {
       uri: music.uri,
       title: music.title,
       artist: music.artist,
+      coverImage: music.coverImage,
     },
   });
 }
 
 async function createAlbum(req, res) {
-  const { title, musics } = req.body;
+  const { title } = req.body;
+  let musics = req.body.musics;
+  const coverImageFile = req.file; // uploadImageSingle se aayega
+  // FormData se musics JSON string ban ke aata hai
+  if (typeof musics === "string") {
+    try {
+      musics = JSON.parse(musics);
+    } catch {
+      musics = [];
+    }
+  }
+
+  if (coverImageFile) {
+    const imageValidation = validateFile(coverImageFile, "image");
+    if (!imageValidation.valid) {
+      return res.status(400).json({ message: imageValidation.message });
+    }
+  }
+
   if (Array.isArray(musics) && musics.length > 0) {
     const ownedCount = await musicModel.countDocuments({
       _id: { $in: musics },
@@ -48,10 +85,21 @@ async function createAlbum(req, res) {
       });
     }
   }
+
+  let coverImageUrl = null;
+  if (coverImageFile) {
+    const imageResult = await uploadFile({
+      ...coverImageFile,
+      folder: "covers",
+    });
+    coverImageUrl = imageResult.url;
+  }
+
   const album = await albumModel.create({
     title,
     artist: req.user.id,
     musics,
+    coverImage: coverImageUrl,
   });
 
   return res.status(201).json({
@@ -61,6 +109,7 @@ async function createAlbum(req, res) {
       title: album.title,
       artist: album.artist,
       musics: album.musics,
+      coverImage: album.coverImage,
     },
   });
 }
@@ -83,9 +132,29 @@ async function getMyMusics(req, res) {
     .sort({ createdAt: -1, _id: -1 })
     .populate("artist", "username email");
 
+  // Har music ke liye playHistory se count nikalo, ek hi aggregation call mein
+  const musicIds = musics.map((m) => m._id);
+
+  const playCounts = await playHistoryModel.aggregate([
+    { $match: { music: { $in: musicIds } } },
+    { $group: { _id: "$music", count: { $sum: 1 } } },
+  ]);
+
+  // { musicId: count } shape mein map banao, fast lookup ke liye
+  const countMap = {};
+  playCounts.forEach((pc) => {
+    countMap[pc._id.toString()] = pc.count;
+  });
+
+  const musicsWithCount = musics.map((m) => {
+    const data = m.toObject();
+    data.playCount = countMap[m._id.toString()] || 0;
+    return data;
+  });
+
   return res.status(200).json({
     message: "Artist Music Fetched Successfully",
-    musics,
+    musics: musicsWithCount,
   });
 }
 
@@ -94,10 +163,14 @@ async function getAllAlbums(req, res) {
     .find()
     .sort({ createdAt: -1, _id: -1 })
     .populate("artist", "username email")
-    .populate({ path: "musics", populate: { path: "artist", select: "username email" } });
+    .populate({
+      path: "musics",
+      populate: { path: "artist", select: "username email" },
+    });
   const normalizedAlbums = albums.map((album) => {
     const data = album.toObject();
-    if (!data.artist && data.musics?.[0]?.artist) data.artist = data.musics[0].artist;
+    if (!data.artist && data.musics?.[0]?.artist)
+      data.artist = data.musics[0].artist;
     return data;
   });
 
@@ -112,7 +185,10 @@ async function getMyAlbums(req, res) {
     .find({ artist: req.user.id })
     .sort({ createdAt: -1, _id: -1 })
     .populate("artist", "username email")
-    .populate({ path: "musics", populate: { path: "artist", select: "username email" } });
+    .populate({
+      path: "musics",
+      populate: { path: "artist", select: "username email" },
+    });
 
   return res.status(200).json({
     message: "Artist Albums Fetched Successfully",
@@ -126,7 +202,10 @@ async function getAlbumById(req, res) {
   const album = await albumModel
     .findById(albumId)
     .populate("artist", "username email")
-    .populate({ path: "musics", populate: { path: "artist", select: "username email" } });
+    .populate({
+      path: "musics",
+      populate: { path: "artist", select: "username email" },
+    });
 
   if (!album) {
     return res.status(404).json({
@@ -352,18 +431,27 @@ async function getArtists(req, res) {
   const { q } = req.query;
   const filter = { role: "artist" };
   if (q?.trim()) filter.username = new RegExp(q.trim(), "i");
-  const artists = await userModel.find(filter).select("_id username email").sort({ username: 1 });
-  return res.status(200).json({ message: "Artists fetched successfully", artists });
+  const artists = await userModel
+    .find(filter)
+    .select("_id username email")
+    .sort({ username: 1 });
+  return res
+    .status(200)
+    .json({ message: "Artists fetched successfully", artists });
 }
 
 async function getArtistById(req, res) {
-  const artist = await userModel.findOne({ _id: req.params.artistId, role: "artist" })
+  const artist = await userModel
+    .findOne({ _id: req.params.artistId, role: "artist" })
     .select("_id username email");
   if (!artist) return res.status(404).json({ message: "Artist not found" });
-  const musics = await musicModel.find({ artist: artist._id })
+  const musics = await musicModel
+    .find({ artist: artist._id })
     .sort({ createdAt: -1, _id: -1 })
     .populate("artist", "username email");
-  return res.status(200).json({ message: "Artist fetched successfully", artist, musics });
+  return res
+    .status(200)
+    .json({ message: "Artist fetched successfully", artist, musics });
 }
 
 // ========================================
@@ -396,6 +484,104 @@ async function getRecentlyPlayed(req, res) {
   });
 }
 
+async function updateMusic(req, res) {
+  const { musicId } = req.params;
+  const { title } = req.body;
+
+  if (!title?.trim()) {
+    return res.status(400).json({ message: "Title is required" });
+  }
+
+  const music = await musicModel.findById(musicId);
+
+  if (!music) {
+    return res.status(404).json({ message: "Music not found" });
+  }
+
+  if (music.artist.toString() !== req.user.id) {
+    return res
+      .status(403)
+      .json({ message: "You can only edit your own music" });
+  }
+
+  music.title = title.trim();
+  await music.save();
+
+  return res.status(200).json({
+    message: "Music updated successfully",
+    music,
+  });
+}
+
+async function updateAlbum(req, res) {
+  const { albumId } = req.params;
+  const { title } = req.body;
+
+  if (!title?.trim()) {
+    return res.status(400).json({ message: "Title is required" });
+  }
+
+  const album = await albumModel.findById(albumId);
+
+  if (!album) {
+    return res.status(404).json({ message: "Album not found" });
+  }
+
+  if (album.artist.toString() !== req.user.id) {
+    return res
+      .status(403)
+      .json({ message: "You can only edit your own album" });
+  }
+
+  album.title = title.trim();
+  await album.save();
+
+  return res.status(200).json({
+    message: "Album updated successfully",
+    album,
+  });
+}
+
+async function removeMusicFromAlbum(req, res) {
+  const { albumId, musicId } = req.params;
+
+  const album = await albumModel.findById(albumId);
+
+  if (!album) {
+    return res.status(404).json({ message: "Album not found" });
+  }
+
+  if (album.artist.toString() !== req.user.id) {
+    return res
+      .status(403)
+      .json({ message: "You can only edit your own album" });
+  }
+
+  const wasPresent = album.musics.some((id) => id.toString() === musicId);
+
+  if (!wasPresent) {
+    return res
+      .status(404)
+      .json({ message: "This song is not part of the album" });
+  }
+
+  album.musics = album.musics.filter((id) => id.toString() !== musicId);
+  await album.save();
+
+  const updatedAlbum = await albumModel
+    .findById(albumId)
+    .populate("artist", "username email")
+    .populate({
+      path: "musics",
+      populate: { path: "artist", select: "username email" },
+    });
+
+  return res.status(200).json({
+    message: "Song removed from album",
+    album: updatedAlbum,
+  });
+}
+
 export default {
   createMusic,
   createAlbum,
@@ -415,4 +601,7 @@ export default {
   getArtists,
   getArtistById,
   getRecentlyPlayed,
+  updateMusic,
+  updateAlbum,
+  removeMusicFromAlbum,
 };

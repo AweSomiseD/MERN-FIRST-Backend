@@ -1,6 +1,9 @@
 import express from "express";
 import musicControllers from "../controllers/music.controllers.js";
-import { uploadAudioSingle } from "../middlewares/upload.middleware.js";
+import {
+  uploadAudioSingle,
+  uploadImageSingle,
+} from "../middlewares/upload.middleware.js";
 import authMiddleware from "../middlewares/auth.middleware.js";
 import roleMiddleware from "../middlewares/role.middleware.js";
 
@@ -19,6 +22,7 @@ Router.post(
   "/album",
   authMiddleware.authUser,
   roleMiddleware(["artist"]),
+  uploadImageSingle("coverImage"),
   musicControllers.createAlbum,
 );
 
@@ -48,6 +52,27 @@ Router.delete(
   authMiddleware.authUser,
   roleMiddleware(["artist"]),
   musicControllers.deleteAlbum,
+);
+
+Router.patch(
+  "/:musicId",
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
+  musicControllers.updateMusic,
+);
+
+Router.patch(
+  "/album/:albumId",
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
+  musicControllers.updateAlbum,
+);
+
+Router.delete(
+  "/album/:albumId/music/:musicId",
+  authMiddleware.authUser,
+  roleMiddleware(["artist"]),
+  musicControllers.removeMusicFromAlbum,
 );
 
 // Listener + Artist
