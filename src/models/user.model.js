@@ -16,6 +16,9 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  likedMusics: [{ type: mongoose.Schema.Types.ObjectId, ref: "music" }],
+
+  followedArtists: [{ type: mongoose.Schema.Types.ObjectId, ref: "user" }],
 
   googleId: {
     type: String,

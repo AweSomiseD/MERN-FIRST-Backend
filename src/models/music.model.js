@@ -14,7 +14,7 @@ const musicSchema = new mongoose.Schema({
     ref: "user",
     required: true,
   },
-});
+}, { timestamps: true });
 
 const musicModel = mongoose.model("music", musicSchema);
 
