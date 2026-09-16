@@ -155,7 +155,7 @@ async function loginUser(req, res) {
       sameSite: "lax",
       secure: false,
       path: "/",
-      maxAge: 15 * 60 * 1000,
+      maxAge: 16 * 60 * 1000,
     });
 
     res.cookie("refreshToken", refreshToken, {

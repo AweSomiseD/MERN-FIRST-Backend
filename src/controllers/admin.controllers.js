@@ -1,6 +1,23 @@
 import userModel from "../models/user.model.js";
 import musicModel from "../models/music.model.js";
 import albumModel from "../models/album.model.js";
+import auditLogModel from "../models/auditLog.model.js";
+
+async function logAction(adminId, action, targetType, targetId, details = {}) {
+  try {
+    await auditLogModel.create({
+      admin: adminId,
+      action,
+      targetType,
+      targetId,
+      details,
+    });
+  } catch (error) {
+    // Audit log fail hone se main action fail nahi hona chahiye —
+    // bas console pe note kar do
+    console.error("Audit Log Error:", error);
+  }
+}
 
 async function getAllUsers(req, res) {
   try {
@@ -48,6 +65,10 @@ async function updateUserRole(req, res) {
         .json({ message: "You cannot change your own role" });
     }
 
+    const previousUser = await userModel
+      .findById(userId)
+      .select("role username");
+
     const user = await userModel
       .findByIdAndUpdate(userId, { role }, { new: true })
       .select("-password");
@@ -55,6 +76,12 @@ async function updateUserRole(req, res) {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+
+    await logAction(req.user.id, "USER_ROLE_CHANGED", "user", user._id, {
+      username: user.username,
+      from: previousUser?.role,
+      to: role,
+    });
 
     return res.status(200).json({
       message: "User role updated successfully",
@@ -84,6 +111,14 @@ async function toggleUserBan(req, res) {
 
     user.isBanned = !user.isBanned;
     await user.save();
+
+    await logAction(
+      req.user.id,
+      user.isBanned ? "USER_BANNED" : "USER_UNBANNED",
+      "user",
+      user._id,
+      { username: user.username },
+    );
 
     return res.status(200).json({
       message: user.isBanned
@@ -119,6 +154,11 @@ async function deleteUser(req, res) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    await logAction(req.user.id, "USER_DELETED", "user", user._id, {
+      username: user.username,
+      email: user.email,
+    });
+
     return res.status(200).json({
       message: "User deleted successfully",
     });
@@ -138,6 +178,10 @@ async function deleteAnyMusic(req, res) {
       return res.status(404).json({ message: "Music not found" });
     }
 
+    await logAction(req.user.id, "MUSIC_DELETED", "music", music._id, {
+      title: music.title,
+    });
+
     return res.status(200).json({ message: "Music deleted by admin" });
   } catch (error) {
     console.error("Admin Delete Music Error:", error);
@@ -154,6 +198,10 @@ async function deleteAnyAlbum(req, res) {
     if (!album) {
       return res.status(404).json({ message: "Album not found" });
     }
+
+    await logAction(req.user.id, "ALBUM_DELETED", "album", album._id, {
+      title: album.title,
+    });
 
     return res.status(200).json({ message: "Album deleted by admin" });
   } catch (error) {
@@ -177,8 +225,6 @@ async function getPlatformStats(req, res) {
           .limit(5),
       ]);
 
-    // Aggregation ka result [{ _id: "listener", count: 5 }, ...] hota hai,
-    // usko { listener: 5, artist: 2, admin: 1 } shape mein convert karo
     const roleCounts = { listener: 0, artist: 0, admin: 0 };
     roleBreakdown.forEach((r) => {
       roleCounts[r._id] = r.count;
@@ -200,6 +246,24 @@ async function getPlatformStats(req, res) {
   }
 }
 
+async function getAuditLogs(req, res) {
+  try {
+    const logs = await auditLogModel
+      .find()
+      .populate("admin", "username email")
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    return res.status(200).json({
+      message: "Audit logs fetched successfully",
+      logs,
+    });
+  } catch (error) {
+    console.error("Get Audit Logs Error:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
 export default {
   getAllUsers,
   updateUserRole,
@@ -208,4 +272,5 @@ export default {
   deleteAnyMusic,
   deleteAnyAlbum,
   getPlatformStats,
+  getAuditLogs,
 };

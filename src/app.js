@@ -5,8 +5,28 @@ import musicRouter from "./routes/music.routes.js";
 import cors from "cors";
 import "dotenv/config";
 import adminRouter from "./routes/admin.routes.js";
+// import helmet from "helmet";
+import Limiter from "express-rate-limit";
 
 const app = express();
+const generalLimiter = Limiter({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: "Too many requests from this IP, please try again after a minute.",
+});
+
+const authLimiter = Limiter({
+  windowMs: 60 * 1000,
+  max: 15,
+  message: "Too many attempts from this IP, please try again after a minute.",
+});
+
+const musicLimiter = Limiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: "Too many requests from this IP, please try again after a minute.",
+});
+
 app.use(express.urlencoded({ extended: true }));
 app.use(
   cors({
@@ -16,11 +36,12 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
-
-app.use(express.json());
+// app.use(helmet()); only to use this package when you are deploying the app in production, otherwise it will block some requests in development
+app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
-app.use("/api/auth", authRouter);
-app.use("/api/music", musicRouter);
+app.use(generalLimiter);
+app.use("/api/auth", authLimiter, authRouter);
+app.use("/api/music", musicLimiter, musicRouter);
 app.use("/api/admin", adminRouter);
 
 export default app;

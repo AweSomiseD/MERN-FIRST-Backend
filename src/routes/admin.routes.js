@@ -14,5 +14,6 @@ Router.delete("/users/:userId", adminControllers.deleteUser);
 Router.delete("/music/:musicId", adminControllers.deleteAnyMusic);
 Router.delete("/album/:albumId", adminControllers.deleteAnyAlbum);
 Router.get("/stats", adminControllers.getPlatformStats);
+Router.get("/audit-logs", adminControllers.getAuditLogs);
 
 export default Router;
