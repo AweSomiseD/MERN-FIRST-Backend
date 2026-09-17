@@ -19,6 +19,16 @@ import generateUsername from "../utils/generateUsername.js";
 async function registerUser(req, res) {
   try {
     const { username, email, password, role = "listener" } = req.body;
+    if (
+      typeof username !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      typeof role !== "string"
+    ) {
+      return res.status(400).json({
+        message: "Invalid input type",
+      });
+    }
     if (!username || !email || !password) {
       return res.status(400).json({
         message: "Username, email and password are required",
