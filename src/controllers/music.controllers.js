@@ -1,5 +1,8 @@
 import musicModel from "../models/music.model.js";
-import uploadFile from "../services/storage.service.js";
+import uploadFile, {
+  deleteMusicFiles,
+  deleteAlbumCover,
+} from "../services/storage.service.js";
 import albumModel from "../models/album.model.js";
 import playHistoryModel from "../models/playHistory.model.js";
 import { validateFile } from "../utils/fileValidation.js";
@@ -26,19 +29,23 @@ async function createMusic(req, res) {
   const result = await uploadFile(file);
 
   let coverImageUrl = null;
+  let coverImageFileId = null;
   if (coverImageFile) {
     const imageResult = await uploadFile({
       ...coverImageFile,
       folder: "covers",
     });
     coverImageUrl = imageResult.url;
+    coverImageFileId = imageResult.fileId;
   }
 
   const music = await musicModel.create({
     uri: result.url,
+    fileId: result.fileId,
     title,
     artist: req.user.id,
     coverImage: coverImageUrl,
+    coverImageFileId,
   });
 
   return res.status(201).json({
@@ -87,12 +94,14 @@ async function createAlbum(req, res) {
   }
 
   let coverImageUrl = null;
+  let coverImageFileId = null;
   if (coverImageFile) {
     const imageResult = await uploadFile({
       ...coverImageFile,
       folder: "covers",
     });
     coverImageUrl = imageResult.url;
+    coverImageFileId = imageResult.fileId;
   }
 
   const album = await albumModel.create({
@@ -100,6 +109,7 @@ async function createAlbum(req, res) {
     artist: req.user.id,
     musics,
     coverImage: coverImageUrl,
+    coverImageFileId,
   });
 
   return res.status(201).json({
@@ -242,6 +252,8 @@ async function deleteMusic(req, res) {
   }
 
   await musicModel.findByIdAndDelete(musicId);
+  // DB delete ho gaya, ab ImageKit se files hatao (best effort)
+  await deleteMusicFiles(music);
 
   return res.status(200).json({ message: "Music deleted successfully" });
 }
@@ -262,6 +274,7 @@ async function deleteAlbum(req, res) {
   }
 
   await albumModel.findByIdAndDelete(albumId);
+  await deleteAlbumCover(album);
 
   return res.status(200).json({ message: "Album deleted successfully" });
 }

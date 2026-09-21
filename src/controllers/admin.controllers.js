@@ -2,6 +2,10 @@ import userModel from "../models/user.model.js";
 import musicModel from "../models/music.model.js";
 import albumModel from "../models/album.model.js";
 import auditLogModel from "../models/auditLog.model.js";
+import {
+  deleteMusicFiles,
+  deleteAlbumCover,
+} from "../services/storage.service.js";
 
 async function logAction(adminId, action, targetType, targetId, details = {}) {
   try {
@@ -178,6 +182,9 @@ async function deleteAnyMusic(req, res) {
       return res.status(404).json({ message: "Music not found" });
     }
 
+    // ImageKit se audio + cover hatao (best effort)
+    await deleteMusicFiles(music);
+
     await logAction(req.user.id, "MUSIC_DELETED", "music", music._id, {
       title: music.title,
     });
@@ -198,6 +205,8 @@ async function deleteAnyAlbum(req, res) {
     if (!album) {
       return res.status(404).json({ message: "Album not found" });
     }
+
+    await deleteAlbumCover(album);
 
     await logAction(req.user.id, "ALBUM_DELETED", "album", album._id, {
       title: album.title,

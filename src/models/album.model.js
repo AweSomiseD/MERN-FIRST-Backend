@@ -21,6 +21,10 @@ const albumSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    coverImageFileId: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true },
 );
