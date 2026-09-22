@@ -1,9 +1,31 @@
 import ImageKit from "@imagekit/nodejs";
 import path from "node:path";
+import sharp from "sharp";
 
 const client = new ImageKit({
   privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
 });
+
+const TARGET_SIZE_BYTES = 4 * 1024 * 1024; // ~4MB
+async function compressImage(buffer) {
+  let quality = 80;
+  let width = 1200;
+  let output = await sharp(buffer)
+    .resize({ width, withoutEnlargement: true })
+    .jpeg({ quality })
+    .toBuffer();
+
+  // Jab tak size target se bara hai, quality kam karo
+  while (output.length > TARGET_SIZE_BYTES && quality > 30) {
+    quality -= 10;
+    output = await sharp(buffer)
+      .resize({ width, withoutEnlargement: true })
+      .jpeg({ quality })
+      .toBuffer();
+  }
+
+  return output;
+}
 
 async function uploadFile({
   buffer,
@@ -11,13 +33,23 @@ async function uploadFile({
   originalname,
   folder = "music",
 }) {
-  const extension = path.extname(originalname || "").toLowerCase();
+  let finalBuffer = buffer;
+  let finalMimetype = mimetype;
+  let extension = path.extname(originalname || "").toLowerCase();
+
+  const COMPRESS_THRESHOLD = 5 * 1024 * 1024; // 5 MB
+
+  // Sirf image ho AUR size 5MB se bara ho, tabhi compress karo
+  if (mimetype.startsWith("image/") && buffer.length > COMPRESS_THRESHOLD) {
+    finalBuffer = await compressImage(buffer);
+    finalMimetype = "image/jpeg";
+    extension = ".jpg";
+  }
+
   const fileName = `upload_${Date.now()}${extension}`;
 
   const result = await client.files.upload({
-    // Include the MIME type so ImageKit does not have to infer it from the
-    // generated filename (which is especially important for cover images).
-    file: `data:${mimetype};base64,${buffer.toString("base64")}`,
+    file: `data:${finalMimetype};base64,${finalBuffer.toString("base64")}`,
     fileName,
     folder: `yt-complete-backend/${folder}`,
   });

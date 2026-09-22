@@ -18,7 +18,7 @@ export const FILE_TYPE_CONFIG = {
   },
   image: {
     allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
-    maxSizeBytes: 5 * 1024 * 1024,
+    maxSizeBytes: 15 * 1024 * 1024,
     label: "image",
     formatsLabel: "JPG, PNG, WEBP",
   },
