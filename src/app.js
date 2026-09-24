@@ -7,8 +7,12 @@ import "dotenv/config";
 import adminRouter from "./routes/admin.routes.js";
 // import helmet from "helmet";
 import Limiter from "express-rate-limit";
+import { connectRedis } from "../src/config/redis.js";
+import compression from "compression";
 
 const app = express();
+app.use(compression());
+connectRedis(); // Redis connection establish karne ke liye
 const generalLimiter = Limiter({
   windowMs: 60 * 1000,
   max: 100,
@@ -17,13 +21,13 @@ const generalLimiter = Limiter({
 
 const authLimiter = Limiter({
   windowMs: 60 * 1000,
-  max: 15,
+  max: 10,
   message: "Too many attempts from this IP, please try again after a minute.",
 });
 
 const musicLimiter = Limiter({
   windowMs: 60 * 1000,
-  max: 30,
+  max: 10,
   message: "Too many requests from this IP, please try again after a minute.",
 });
 
