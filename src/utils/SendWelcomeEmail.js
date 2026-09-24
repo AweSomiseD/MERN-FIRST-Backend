@@ -4,7 +4,7 @@ const resend = new Resend(process.env.RESEND_API_KEY); // key .env mein rakho, k
 
 export async function SendWelcomeEmail(toEmail, userName) {
   await resend.emails.send({
-    from: "onboarding@yourdomain.com",
+    from: "onboarding@resend.dev",
     to: toEmail,
     subject: "Welcome to our Spotify Clone!",
     html: `<h1>Hi ${userName}!</h1><p>Thanks for joining. Start listening now 🎵</p>`,
