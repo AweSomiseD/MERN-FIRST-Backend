@@ -8,6 +8,11 @@ import playHistoryModel from "../models/playHistory.model.js";
 import { validateFile } from "../utils/fileValidation.js";
 import userModel from "../models/user.model.js";
 import mongoose from "mongoose";
+import {
+  getCache,
+  setCache,
+  deleteCacheByPattern,
+} from "../services/cache.service.js";
 
 async function createMusic(req, res) {
   const { title } = req.body;
@@ -47,6 +52,8 @@ async function createMusic(req, res) {
     coverImage: coverImageUrl,
     coverImageFileId,
   });
+
+  await deleteCacheByPattern("music:*");
 
   return res.status(201).json({
     message: "Song Created Successfully!!!",
@@ -111,6 +118,7 @@ async function createAlbum(req, res) {
     coverImage: coverImageUrl,
     coverImageFileId,
   });
+  await deleteCacheByPattern("music:*");
 
   return res.status(201).json({
     message: "Album Created Successfully",
@@ -125,11 +133,23 @@ async function createAlbum(req, res) {
 }
 
 async function getAllMusics(req, res) {
+  const cacheKey = "music:all";
+  const cached = await getCache(cacheKey);
+  console.log("⚡ CACHE se mila — DB touch nahi hua");
+  if (cached) {
+    return res.status(200).json({
+      message: "Music Fetched Successfully",
+      musics: cached,
+    });
+  }
+  console.log("🐢 DB se le rahe hain — cache khali thi");
   const musics = await musicModel
     .find()
     .limit(10)
     .sort({ createdAt: -1, _id: -1 })
     .populate("artist", "username email");
+  await setCache(cacheKey, musics, 60);
+
   return res.status(200).json({
     message: "Music Fetched Successfully",
     musics,
@@ -252,6 +272,7 @@ async function deleteMusic(req, res) {
   }
 
   await musicModel.findByIdAndDelete(musicId);
+  await deleteCacheByPattern("music:*");
   // DB delete ho gaya, ab ImageKit se files hatao (best effort)
   await deleteMusicFiles(music);
 
@@ -274,6 +295,7 @@ async function deleteAlbum(req, res) {
   }
 
   await albumModel.findByIdAndDelete(albumId);
+  await deleteCacheByPattern("music:*");
   await deleteAlbumCover(album);
 
   return res.status(200).json({ message: "Album deleted successfully" });
@@ -519,6 +541,7 @@ async function updateMusic(req, res) {
 
   music.title = title.trim();
   await music.save();
+  await deleteCacheByPattern("music:*");
 
   return res.status(200).json({
     message: "Music updated successfully",
@@ -548,6 +571,7 @@ async function updateAlbum(req, res) {
 
   album.title = title.trim();
   await album.save();
+  await deleteCacheByPattern("music:*");
 
   return res.status(200).json({
     message: "Album updated successfully",
@@ -588,6 +612,7 @@ async function removeMusicFromAlbum(req, res) {
       path: "musics",
       populate: { path: "artist", select: "username email" },
     });
+  await deleteCacheByPattern("music:*");
 
   return res.status(200).json({
     message: "Song removed from album",
