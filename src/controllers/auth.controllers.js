@@ -14,6 +14,7 @@ import {
   verifyGoogleIdToken,
 } from "../services/googleOAuth.service.js";
 import generateUsername from "../utils/generateUsername.js";
+import { SendWelcomeEmail } from "../utils/SendWelcomeEmail.js";
 
 //  ACTUALL CONTROLLERS WERE DOWN BELOW...
 async function registerUser(req, res) {
@@ -65,6 +66,7 @@ async function registerUser(req, res) {
     // Email fail ho bhi jaye to registration ko fail mat karo
     try {
       await sendVerificationEmail(normalizedEmail, plainToken);
+      await SendWelcomeEmail(normalizedEmail, username);
     } catch (emailError) {
       console.error("Verification email failed to send:", emailError);
       // ignore — user register ho chuka hai, email baad mein resend ho sakti hai

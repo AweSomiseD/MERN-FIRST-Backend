@@ -6,6 +6,7 @@ import {
   deleteMusicFiles,
   deleteAlbumCover,
 } from "../services/storage.service.js";
+import { deleteCacheByPattern } from "../services/cache.service.js";
 
 async function logAction(adminId, action, targetType, targetId, details = {}) {
   try {
@@ -177,6 +178,7 @@ async function deleteAnyMusic(req, res) {
     const { musicId } = req.params;
 
     const music = await musicModel.findByIdAndDelete(musicId);
+    await deleteCacheByPattern("music:*");
 
     if (!music) {
       return res.status(404).json({ message: "Music not found" });
@@ -201,6 +203,7 @@ async function deleteAnyAlbum(req, res) {
     const { albumId } = req.params;
 
     const album = await albumModel.findByIdAndDelete(albumId);
+    await deleteCacheByPattern("album:*");
 
     if (!album) {
       return res.status(404).json({ message: "Album not found" });
