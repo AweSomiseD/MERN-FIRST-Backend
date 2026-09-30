@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import app from "./src/app.js";
 import connectDB from "./src/db/db.js";
 import jwt from "jsonwebtoken";
+import registerSockets from "./src/sockets/index.js";
 
 connectDB();
 
@@ -72,21 +73,7 @@ function broadcastListenerCount() {
   io.emit("online_count", getListenerCount());
 }
 
-io.on("connection", (socket) => {
-  console.log("New client connected:", socket.id, "Role:", socket.userRole);
-
-  broadcastListenerCount();
-
-  socket.on("get_online_count", () => {
-    socket.emit("online_count", getListenerCount());
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-
-    broadcastListenerCount();
-  });
-});
+registerSockets(io);
 
 httpServer.listen(3000, () => {
   console.log("Server Is Running On 3000 Port");

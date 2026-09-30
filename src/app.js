@@ -9,6 +9,7 @@ import adminRouter from "./routes/admin.routes.js";
 import Limiter from "express-rate-limit";
 import { connectRedis } from "../src/config/redis.js";
 import compression from "compression";
+import messageRouter from "./routes/message.routes.js";
 
 const app = express();
 app.use(compression());
@@ -47,5 +48,6 @@ app.use(generalLimiter);
 app.use("/api/auth", authLimiter, authRouter);
 app.use("/api/music", musicLimiter, musicRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/messages", messageRouter);
 
 export default app;
