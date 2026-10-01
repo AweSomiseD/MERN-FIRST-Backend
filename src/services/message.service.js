@@ -100,7 +100,6 @@ export async function sendMessage({
   // Doosra user delete ho chuka ho to message nahi bhej sakte
   const receiverExists =
     receiver && (await userModel.exists({ _id: receiver.user }));
-
   if (!receiverExists) {
     throw new AppError(
       409,

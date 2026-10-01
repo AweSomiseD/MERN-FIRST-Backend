@@ -1,11 +1,10 @@
 import { getParticipantConversation } from "../services/conversation.service.js";
-
 import {
   sendMessage,
   markConversationRead,
 } from "../services/message.service.js";
 
-export default function registerChatSocket(io, socket) {
+export default function registerChatSocket(io, socket, { isUserOnline }) {
   console.log("Chat socket registered:", socket.id);
 
   // Join conversation room
@@ -17,6 +16,9 @@ export default function registerChatSocket(io, socket) {
       );
 
       const room = `conversation:${conversation._id}`;
+      const otherParticipant = conversation.participants.find(
+        (participant) => String(participant.user) !== String(socket.userId),
+      );
 
       socket.join(room);
 
@@ -34,6 +36,10 @@ export default function registerChatSocket(io, socket) {
       ack?.({
         success: true,
         conversationId: conversation._id,
+        otherUserId: otherParticipant?.user ?? null,
+        isOtherUserOnline: otherParticipant
+          ? isUserOnline(otherParticipant.user)
+          : false,
       });
     } catch (error) {
       console.error("Conversation join error:", error);
@@ -63,6 +69,14 @@ export default function registerChatSocket(io, socket) {
       // Send message to everyone currently inside this conversation
       io.to(room).emit("message:new", result.message);
 
+      const receiver = result.conversation.participants.find(
+        (participant) => String(participant.user) !== String(socket.userId),
+      );
+      if (receiver) {
+        // Reach online participants who have not opened this conversation room.
+        io.to(`user:${receiver.user}`).emit("message:new", result.message);
+      }
+
       // Send acknowledgement to sender
       ack?.({
         success: true,
@@ -83,10 +97,36 @@ export default function registerChatSocket(io, socket) {
   // Mark conversation as read
   socket.on("conversation:read", async (conversationId, ack) => {
     try {
+      const conversation = await getParticipantConversation(
+        conversationId,
+        socket.userId,
+      );
       const result = await markConversationRead({
         conversationId,
         userId: socket.userId,
       });
+
+      if (result.previousUnreadCount > 0) {
+        const receipt = {
+          conversationId: String(conversation._id),
+          userId: String(socket.userId),
+          readAt: result.readAt,
+        };
+        io.to(`conversation:${conversation._id}`).emit(
+          "conversation:read",
+          receipt,
+        );
+
+        const otherParticipant = conversation.participants.find(
+          (participant) => String(participant.user) !== String(socket.userId),
+        );
+        if (otherParticipant) {
+          io.to(`user:${otherParticipant.user}`).emit(
+            "conversation:read",
+            receipt,
+          );
+        }
+      }
 
       ack?.({
         success: true,
@@ -103,5 +143,34 @@ export default function registerChatSocket(io, socket) {
         code: error.code || "CONVERSATION_READ_FAILED",
       });
     }
+  });
+
+  const emitTyping = async (eventName, payload) => {
+    try {
+      const conversation = await getParticipantConversation(
+        payload?.conversationId,
+        socket.userId,
+      );
+      const otherParticipant = conversation.participants.find(
+        (participant) => String(participant.user) !== String(socket.userId),
+      );
+
+      if (!otherParticipant) return;
+
+      io.to(`user:${otherParticipant.user}`).emit(eventName, {
+        conversationId: String(conversation._id),
+        userId: String(socket.userId),
+      });
+    } catch (error) {
+      console.error(`${eventName} error:`, error);
+    }
+  };
+
+  socket.on("typing:start", (payload) => {
+    emitTyping("typing:start", payload);
+  });
+
+  socket.on("typing:stop", (payload) => {
+    emitTyping("typing:stop", payload);
   });
 }

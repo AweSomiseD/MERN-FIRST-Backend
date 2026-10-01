@@ -51,27 +51,20 @@ io.use((socket, next) => {
       if (token) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         socket.userId = decoded.id;
-        socket.userRole = decoded.role;
       }
     }
 
-    next(); // sab theek hai, connection allow karo
+    if (!socket.userId) {
+      return next(new Error("Authentication required"));
+    }
+
+    next();
   } catch (error) {
     socket.userId = null;
     socket.userRole = "guest";
-    next();
+    next(new Error("Invalid or expired access token"));
   }
 });
-
-function getListenerCount() {
-  return [...io.sockets.sockets.values()].filter(
-    (connectedSocket) => connectedSocket.userRole === "listener",
-  ).length;
-}
-
-function broadcastListenerCount() {
-  io.emit("online_count", getListenerCount());
-}
 
 registerSockets(io);
 
